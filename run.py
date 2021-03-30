@@ -1,22 +1,10 @@
 #!/usr/bin/env python3
 
-# Import packages
 import argparse
 import os
 import subprocess
-#import nibabel
-import numpy
 from glob import glob
-import pandas
-import boto3
-import botocore
-
-# For anonymous access to the bucket.
-from botocore import UNSIGNED
-from botocore.client import Config
-from botocore.handlers import disable_signing
-from multiprocessing import Pool
-from itertools import product
+from utils.s3_bids import get_bids_subjects, get_bids_sessions
 
 #debugging
 import pdb
@@ -39,37 +27,7 @@ def run(command, env={}):
     if process.returncode != 0:
         raise Exception("Non zero return code: %d"%process.returncode)
 
-def get_bids_subjects(access_key,bucketName,prefix,secret_key,host):
-    pdb.set_trace()
-    session = boto3.session.Session()
-    client = session.client('s3',endpoint_url=host,
-                                 aws_access_key_id=access_key, 
-                                 aws_secret_access_key=secret_key)
-    get_data = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
-                                            Prefix=prefix,
-                                             MaxKeys=1000,
-                                             ContinuationToken='',
-                                             FetchOwner=False,
-                                             StartAfter='')
-    bids_subjects = [item['Prefix'].split('/')[0] for item in get_data['CommonPrefixes'] if 'sub' in item['Prefix'].split('/')[0]]
-    return bids_subjects
-
-def get_bids_sessions(subject_id_path,bucketName,access_key,secret_key,host):
-    session = boto3.session.Session()
-    client = session.client('s3',endpoint_url=host,
-                                 aws_access_key_id=access_key, 
-                                 aws_secret_access_key=secret_key)
-    
-    get_bids_sessions = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
-                                          MaxKeys=1000,
-                                          Prefix='%s/' %(subject_id_path),
-                                          ContinuationToken='',
-                                          FetchOwner=False,
-                                          StartAfter='')
-    bids_sessions = [item['Prefix'].split('/')[1] for item in get_bids_sessions['CommonPrefixes']]
-    return bids_sessions
-
-parser = argparse.ArgumentParser(description='abcd-hcp-pipeline_audit ntrypoint script.')
+parser = argparse.ArgumentParser(description='abcd-hcp-pipeline_audit entrypoint script.')
 parser.add_argument('bids_dir', help='The directory with the input dataset '
                     'formatted according to the BIDS standard. In the case that the BIDS dataset is within s3 provide the path to the folder along with "s3://BUCKET_NAME/path_to_BIDS_folder".')
 parser.add_argument('output_dir', help='The directory where the output files '
@@ -133,7 +91,6 @@ if args.participant_label:
 # for all subjects
 else:
     if bids_dir_bucket_name:
-        pdb.set_trace()
         subjects_to_analyze = get_bids_subjects(bucketName=bids_dir_bucket_name, 
                             prefix=bids_dir_relative_path,
                             access_key=args.s3_access_key, 
@@ -141,7 +98,7 @@ else:
                             host=args.s3_hostname)
     else:
         subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
-        subjects_to_analyze = [subject_dir.split("-")[-1] for subject_dir in subject_dirs]
+        subjects_to_analyze = [subject_dir.split("/")[-1] for subject_dir in subject_dirs]
 
 # running participant level
 if args.analysis_level == "participant":
@@ -149,4 +106,31 @@ if args.analysis_level == "participant":
 
 # running group level
 elif args.analysis_level == "group":
-    pass
+    
+ 
+ 
+ # BIDS layout
+
+    print('\n\n')
+    bids_dir = os.path.join(data_dir,'BIDS_output_2')
+    layout = BIDSLayout(bids_dir,validate=False)
+    expected_tasks = []
+    for t in layout.get_tasks():
+        if len(layout.get_acquisitions(task=t)) > 0:
+            for a in layout.get_acquisitions(task=t):
+                expected_tasks.append(t+'_acq-'+a)
+        else:
+            expected_tasks.append(t)
+        
+    print("Found the following fMRI tasks: ", expected_tasks)
+    columns = expected_tasks.copy()
+    columns.insert(0, "structural")
+    columns.insert(0, "ses_id")
+    columns.insert(0, "subj_id")
+    session_statuses = pd.DataFrame(columns=columns)
+    study_ses_count = len(layout.get_sessions())
+
+    # Iterate through sessions
+    """
+
+    
