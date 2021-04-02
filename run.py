@@ -4,7 +4,8 @@ import argparse
 import os
 import subprocess
 from glob import glob
-from utils.bids import s3_get_bids_subjects, s3_get_bids_sessions, s3_abcd_hcp_struct_outputs, s3_abcd_hcp_func_outputs, s3_get_bids_funcs
+from utils.bids import s3_get_bids_subjects, s3_get_bids_sessions, s3_abcd_hcp_struct_outputs, s3_abcd_hcp_minimal_func_outputs, s3_get_bids_funcs
+import pandas as pd
 
 #debugging
 import pdb
@@ -81,6 +82,8 @@ if 's3://' in args.bids_dir or 's3://' in args.output_dir:
         output_dir_relative_path = args.output_dir.split('s3://'+output_dir_bucket_name)[1]
         if output_dir_relative_path == '/':
             output_dir_relative_path = ''
+        elif output_dir_relative_path[0] == '/':
+            output_dir_relative_path = output_dir_relative_path[1:]
     else:
         output_dir_bucket_name = ''
 
@@ -111,24 +114,11 @@ if bids_dir_bucket_name:
                         access_key=args.s3_access_key, 
                         secret_key=args.s3_secret_key, 
                         host=args.s3_hostname)
-    #columns.insert(0, "structural")
-    #columns.insert(0, "subj_id")
-    expected_tasks = []
-    if len(sessions_to_analyze) > 0:
-        #columns.insert(0, "ses_id")
-        pdb.set_trace()
-        funcs = s3_get_bids_funcs(access_key=args.s3_access_key,
-            bucketName=bids_dir_bucket_name,
-            secret_key=args.s3_secret_key, 
-            host=args.s3_hostname,)
-            #prefix=bids_dir_relative_path + subjects_to_analyze[0]+'/'+sessions_to_analyze[0]+'/func/')
-        pdb.set_trace()
-    else:
-        funcs = s3_get_bids_funcs(access_key=args.s3_access_key,
+    expected_tasks = s3_get_bids_funcs(access_key=args.s3_access_key,
             bucketName=bids_dir_bucket_name,
             secret_key=args.s3_secret_key, 
             host=args.s3_hostname,
-            prefix=bids_dir_relative_path + subjects_to_analyze[0]+'/'+'func')
+            prefix=bids_dir_relative_path + 'sub-')
 else:
     #  bids layout and expected tasks
     layout = BIDSLayout(args.bids_dir,validate=False)
@@ -139,12 +129,18 @@ else:
                 expected_tasks.append(t+'_acq-'+a)
         else:
             expected_tasks.append(t)
-    columns = expected_tasks.copy()
-    columns.insert(0, "structural")
-    columns.insert(0, "subj_id")
-    if len(layout.get_sessions()) > 0:
-        columns.insert(0, "ses_id")
-    statuses = pd.DataFrame(columns=columns)
+print("Found the following fMRI tasks: ", expected_tasks)
+minimal_proc_expected_tasks = ['Minimal Preprocessing: ' + item for item in expected_tasks]
+dcan_bold_proc_expected_tasks = ['DCANBoldPreProc: ' + item for item in expected_tasks]
+expected_tasks = minimal_proc_expected_tasks + dcan_bold_proc_expected_tasks
+columns = expected_tasks.copy()
+
+if len(sessions_to_analyze) > 0:
+    columns.insert(0, "ses_id")
+columns.insert(0, "structural")
+columns.insert(0, "subj_id")
+
+statuses = pd.DataFrame(columns=columns)
 
 for subject in subjects_to_analyze:
     if bids_dir_bucket_name: # if bids dir is a bucket pull sessions from that subject
@@ -157,26 +153,32 @@ for subject in subjects_to_analyze:
         session_dirs = glob(os.path.join(args.bids_dir, subject, "ses-*"))
         sessions_to_analyze = [session_dir.split("/")[-1] for session_dir in session_dirs]
         
-    if session_dirs:
-        if bids_dir_bucket_name:
-            pass
-        else:
-            print("Found the following fMRI tasks: ", expected_tasks)
-            
-            study_ses_count = len(layout.get_sessions())
+    if sessions_to_analyze:
         for session in sessions_to_analyze:
-            print("...scanning session {} (sub-{} ses-{})         ".format(count+1,subject,session),end='\r')
             session_status = pd.DataFrame(columns=columns,index=range(1))
-            session_status.loc[0].subj_id = subject
-            session_status.loc[0].ses_id = session
-            bolds = layout.get(session=session,subject=subject,type='bold',extensions='.nii.gz',return_type='file')
+            session_status.loc[0].subj_id = subject.split('-')[1]
+            session_status.loc[0].ses_id = session.split('-')[1]
+            if bids_dir_bucket_name:
+                bolds = s3_get_bids_funcs(access_key=args.s3_access_key,
+                    bucketName=bids_dir_bucket_name,
+                    secret_key=args.s3_secret_key, 
+                    host=args.s3_hostname,
+                    prefix=bids_dir_relative_path + subject+ '/' +session)
+            else:   
+                bolds = layout.get(session=session,subject=subject,type='bold',extensions='.nii.gz',return_type='file')
             preprocessed_bolds = []
             bids_bolds = []
             for bold in bolds:
-                bold_prefix = os.path.basename(bold).split('.')[0]
-                key = get_bold_processed_outputs(bucketName=bucketName,access_key=access_key,secret_key=secret_key,host=host,subject='sub-'+str(subject),scanning_session='ses-'+str(session),bold=bold_prefix)
-                if key:
-                    preprocessed_bolds.append(key.split("task-")[1].split("_run")[0])
+                pdb.set_trace()
+                bold_prefix = ''.join(os.path.basename(bold).split('.')[0].split('_run-')) # odd format here task-rest01 rather than task-rest_run-01 # TODO: as more use cases come up this may change
+                key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
+                    access_key=args.s3_access_key,
+                    secret_key=args.s3_secret_key,
+                    host=args.s3_hostname,
+                    prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/'+bold_prefix)
+                pdb.set_trace()
+                if key: 
+                    preprocessed_bolds.append(key.split("task-")[1].split("_run")[0]) #TODO: start here next as of 04/02/2021
             for bold in bolds:
                 bids_bolds.append(bold.split("task-")[1].split("_run")[0])
             s3_tasks = list(set(preprocessed_bolds))

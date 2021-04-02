@@ -37,13 +37,12 @@ def s3_get_bids_sessions(access_key,bucketName,host,prefix,secret_key):
     bids_sessions = [item['Prefix'].split('/')[1] for item in get_data['CommonPrefixes'] if 'ses' in item['Prefix'].split('/')[1]]
     return bids_sessions
 
-def s3_get_bids_funcs(access_key,bucketName,host,secret_key):
+def s3_get_bids_funcs(access_key,bucketName,host,prefix,secret_key):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='_bold.nii.gz' # looking for functional nifti files
-    pdb.set_trace()
     try:
         get_data = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
-                                          Prefix='sub-',
+                                          Prefix=prefix,
                                           ContinuationToken='',
                                           FetchOwner=False,
                                           StartAfter='')
@@ -54,20 +53,37 @@ def s3_get_bids_funcs(access_key,bucketName,host,secret_key):
         funcs = []
         for obj in get_data['Contents']:
             key = obj['Key']
+
             if 'func' in key and key.endswith(suffix):
-                task = key.split('task-')[1].split('_')[0]
-                run = key.split('run-')[1].split('_')[0]
+
+                # figure out functional basename
+                try:
+                    task = key.split('task-')[1].split('_')[0]
+                except:
+                    raise Exception('this is not a BIDS folder. Exiting.')
+                try:
+                    run = key.split('run-')[1].split('_')[0]
+                except:
+                    run=''
+                try:
+                    acq = key.split('acq-')[1].split('_')[0]
+                except:
+                    acq=''
                 if not run:
-                    funcs.append('task-'+task)
+                    if not acq:
+                        funcs.append('task-'+task)
+                    else:
+                        funcs.append('task-'+task+'_acq-'+acq)
                 else:
-                    funcs.append('task-'+task+'_run-'+run)
+                    if not acq:
+                        funcs.append('task-'+task+'_run-'+run)
+                    else:
+                        funcs.append('task-'+task+'_acq-'+acq+'_run-'+run)
+                    
         funcs = list(set(funcs))
-        return func
+        return funcs
     except KeyError:
         return
-    
-    
-    #bids_funcs = [item['Prefix'].split('/')[1] for item in get_data['CommonPrefixes'] if '.nii.gz' in item['Prefix'].split('/')[1]]
 
 def s3_abcd_hcp_struct_outputs(bucketName,access_key,secret_key,host,subject,scanning_session,client):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
@@ -121,21 +137,21 @@ def s3_abcd_hcp_struct_outputs(bucketName,access_key,secret_key,host,subject,sca
     elif bidst1 and bidst2 and abcd_hcp_t1:
         struc_status="ok"
 
-def s3_abcd_hcp_func_outputs(bucketName,access_key,secret_key,host,subject,scanning_session,bold):
+def s3_abcd_hcp_minimal_func_outputs(bucketName,access_key,secret_key,host,prefix):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
-    suffix='MSMAll_2_d40_WRN_hp2000_clean.dtseries.nii'
+    suffix='_Atlas.dtseries.nii'
     try:
-        list_objects = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
+        list_objects = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
                                           MaxKeys=1000,
-                                          Prefix='{subject}/{session}/MNINonLinear/Results/{bold}/'.format(subject=subject,session=scanning_session,bold=bold),
+                                          Prefix=prefix,
                                           ContinuationToken='',
                                           FetchOwner=False,
                                           StartAfter='')
         
+        
     except KeyError:
         return
     try:
-        
         for obj in list_objects['Contents']:
             key = obj['Key']
             if key.endswith(suffix):
