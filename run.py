@@ -4,7 +4,7 @@ import argparse
 import os
 import subprocess
 from glob import glob
-from utils.bids import s3_get_bids_subjects, s3_get_bids_sessions, s3_abcd_hcp_struct_outputs, s3_abcd_hcp_minimal_func_outputs, s3_get_bids_funcs
+from utils.bids import bids_layout,s3_get_bids_subjects, s3_get_bids_sessions, s3_abcd_hcp_struct_outputs, s3_abcd_hcp_minimal_func_outputs, s3_get_bids_funcs
 import pandas as pd
 
 #debugging
@@ -86,7 +86,6 @@ if 's3://' in args.bids_dir or 's3://' in args.output_dir:
             output_dir_relative_path = output_dir_relative_path[1:]
     else:
         output_dir_bucket_name = ''
-
 # only for a subset of subjects at participant level
 if args.participant_label and args.analysis_level == "participant":
     subjects_to_analyze = args.participant_label
@@ -98,17 +97,28 @@ elif args.analysis_level == "group":
                             access_key=args.s3_access_key, 
                             secret_key=args.s3_secret_key, 
                             host=args.s3_hostname)
-
     else:
         subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
-        subjects_to_analyze = [subject_dir.split("/")[-1] for subject_dir in subject_dirs]
+        subjects_to_analyze = [subject_dir for subject_dir in subject_dirs]
+    assert subjects_to_analyze, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the BIDS folder?'
+    if output_dir_bucket_name:
+        output_dir_subjects_to_analyze = s3_get_bids_subjects(bucketName=output_dir_bucket_name, 
+                            prefix=output_dir_relative_path,
+                            access_key=args.s3_access_key, 
+                            secret_key=args.s3_secret_key, 
+                            host=args.s3_hostname)
+    else:
+        output_dir_subject_dirs = glob(os.path.join(args.output_dir, "sub-*"))
+        output_dir_subjects_to_analyze = [subject_dir for subject_dir in output_dir_subject_dirs]
+    assert output_dir_subjects_to_analyze, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the abcd-hcp-pipeline derivatives folder?'   
 else:
     raise Exception("You must enter participant --participant_label or group in order to run.")
 
+
 # some prelimnaries prior to looping through data
+if not 'sub-' in subjects_to_analyze[0]:
+    subjects_to_analyze[0] = 'sub-'+subjects_to_analyze[0]
 if bids_dir_bucket_name:
-    if not 'sub-' in subjects_to_analyze[0]:
-        subjects_to_analyze[0] = 'sub-'+subjects_to_analyze[0]
     sessions_to_analyze = s3_get_bids_sessions(bucketName=bids_dir_bucket_name, 
                         prefix=bids_dir_relative_path + subjects_to_analyze[0]+'/',
                         access_key=args.s3_access_key, 
@@ -120,8 +130,8 @@ if bids_dir_bucket_name:
             host=args.s3_hostname,
             prefix=bids_dir_relative_path + 'sub-')
 else:
-    #  bids layout and expected tasks
-    layout = BIDSLayout(args.bids_dir,validate=False)
+    subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
+    """
     expected_tasks = []
     for t in layout.get_tasks():
         if len(layout.get_acquisitions(task=t)) > 0:
@@ -129,6 +139,7 @@ else:
                 expected_tasks.append(t+'_acq-'+a)
         else:
             expected_tasks.append(t)
+    """
 print("Found the following fMRI tasks: ", expected_tasks)
 minimal_proc_expected_tasks = ['Minimal Preprocessing: ' + item for item in expected_tasks]
 dcan_bold_proc_expected_tasks = ['DCANBoldPreProc: ' + item for item in expected_tasks]
@@ -150,8 +161,7 @@ for subject in subjects_to_analyze:
                         secret_key=args.s3_secret_key, 
                         host=args.s3_hostname)
     else:
-        session_dirs = glob(os.path.join(args.bids_dir, subject, "ses-*"))
-        sessions_to_analyze = [session_dir.split("/")[-1] for session_dir in session_dirs]
+        sessions_to_analyze = ['ses-'+session for session in layout.get_sessions(subject=subject.split('-')[1])]
         
     if sessions_to_analyze:
         for session in sessions_to_analyze:
@@ -165,28 +175,48 @@ for subject in subjects_to_analyze:
                     host=args.s3_hostname,
                     prefix=bids_dir_relative_path + subject+ '/' +session)
             else:   
-                bolds = layout.get(session=session,subject=subject,type='bold',extensions='.nii.gz',return_type='file')
-            preprocessed_bolds = []
+                bolds = layout.get(session=session.split('-')[1],subject=subject.split('-')[1],type='bold',extensions='.nii.gz',return_type='file')
+            """
+            minimal_preprocessed_bolds = []
+            DCANBoldPreProc_bolds = []
             bids_bolds = []
-            for bold in bolds:
-                pdb.set_trace()
-                bold_prefix = ''.join(os.path.basename(bold).split('.')[0].split('_run-')) # odd format here task-rest01 rather than task-rest_run-01 # TODO: as more use cases come up this may change
-                key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
-                    access_key=args.s3_access_key,
-                    secret_key=args.s3_secret_key,
-                    host=args.s3_hostname,
-                    prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/'+bold_prefix)
-                pdb.set_trace()
-                if key: 
-                    preprocessed_bolds.append(key.split("task-")[1].split("_run")[0]) #TODO: start here next as of 04/02/2021
-            for bold in bolds:
-                bids_bolds.append(bold.split("task-")[1].split("_run")[0])
-            s3_tasks = list(set(preprocessed_bolds))
-            bids_tasks = list(set(bids_bolds))
+            """
+            if not output_dir_bucket_name:
+                minimal_func_status = abcd_minimal_func_hcp_status_outputs(output_dir=args.output_dir+'/' +subject+ '/' +session)
+                """    
+                for bold in bolds:
+                    bids_bolds.append(bold)
+                  
+            
+                    bold_prefix = ''.join(os.path.basename(bold).split('.')[0].split('_run-')) # odd format here task-rest01 rather than task-rest_run-01 # TODO: as more use cases come up this may change
+                    minimal_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
+                        access_key=args.s3_access_key,
+                        secret_key=args.s3_secret_key,
+                        host=args.s3_hostname,
+                        prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/'+bold_prefix)
+                    dcan_bold_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
+                        access_key=args.s3_access_key,
+                        secret_key=args.s3_secret_key,
+                        host=args.s3_hostname,
+                        prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/DCANBOLDProc_v4.0.0/'+bold_prefix)
+                if minimal_func_key: 
+                    minimal_preprocessed_bolds.append(bold)
+                if dcan_bold_func_key:
+                    DCANBoldPreProc_bolds.append(bold)
+                """
+            else:
+                minimal_func_status = s3_abcd_minimal_func_hcp_status_outputs(bucketName=output_dir_bucket_name,
+                        access_key=args.s3_access_key,
+                        secret_key=args.s3_secret_key,
+                        host=args.s3_hostname,
+                        prefix=output_dir_relative_path + '/' +subject+ '/' +session)    
+            unique_minimal_preprocessed_tasks = list(set(minimal_preprocessed_bolds))
+            unique_DCANBoldPreProc_bolds = list(set(DCANBoldPreProc_bolds))
+            unique_bids_tasks = list(set(bids_bolds))
             for task in expected_tasks:
-                if task in bids_tasks and task not in s3_tasks:
-                    task_status="NO_HCP"
-                elif task in bids_tasks and task in s3_tasks:
+                if task in bids_tasks and task not in unique_minimal_preprocessed_tasks:
+                    task_status="NO"
+                elif task in bids_tasks and task in unique_minimal_preprocessed_tasks:
                     task_status="ok"
                 elif task not in bids_tasks:
                     task_status="NO_BIDS"
@@ -214,6 +244,4 @@ for subject in subjects_to_analyze:
             columns.insert(0, "subj_id")
             session_statuses = pd.DataFrame(columns=columns)
             study_ses_count = len(layout.get_subjects())
-
-
         
