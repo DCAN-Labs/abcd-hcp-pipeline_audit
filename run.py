@@ -4,29 +4,17 @@ import argparse
 import os
 import subprocess
 from glob import glob
-from utils.bids import bids_layout,s3_get_bids_subjects, s3_get_bids_sessions, s3_abcd_hcp_struct_outputs, s3_abcd_hcp_minimal_func_outputs, s3_get_bids_funcs
+from utils.bids import s3_get_bids_subjects, s3_get_bids_sessions, s3_get_bids_funcs,s3_get_bids_structs
+from utils.abcd_hcp_pipeline_status import s3_abcd_hcp_struct_status, s3_abcd_hcp_minimal_func_status, s3_abcd_hcp_DCANBoldPreProc_func_status
+from utils.html import *
 import pandas as pd
+import numpy as np
 
 #debugging
 import pdb
 
 __version__ = open(os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                 'version')).read()
-
-def run(command, env={}):
-    merged_env = os.environ
-    merged_env.update(env)
-    process = subprocess.Popen(command, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, shell=True,
-                               env=merged_env)
-    while True:
-        line = process.stdout.readline()
-        line = str(line, 'utf-8')[:-1]
-        print(line)
-        if line == '' and process.poll() != None:
-            break
-    if process.returncode != 0:
-        raise Exception("Non zero return code: %d"%process.returncode)
 
 parser = argparse.ArgumentParser(description='abcd-hcp-pipeline_audit entrypoint script.')
 parser.add_argument('bids_dir', help='The directory with the input dataset '
@@ -38,6 +26,7 @@ parser.add_argument('output_dir', help='The directory where the output files '
 parser.add_argument('analysis_level', help='Level of the analysis that will be performed. '
                     'Unless checking on status of one participant''s processing, use "group".',
                     choices=['participant', 'group'])
+parser.add_argument('--report_output_dir','--report-output-dir',required=True, help='The directory where the CSV and HTML files will be outputted once the report finishes.')
 parser.add_argument('--participant_label', '--participant-label',help='The label(s) of the participant(s) that should be analyzed. The label '
                    'corresponds to sub-<participant_label> from the BIDS spec '
                    '(so it does not include "sub-"). If this parameter is not '
@@ -65,6 +54,7 @@ parser.add_argument('-v', '--version', action='version',
 # Parse and gather arguments
 args = parser.parse_args()
 
+current_path=os.path.realpath(__file__)
 # determine if bids_dir or output_dir are S3 buckets, and their respective names if so.
 if 's3://' in args.bids_dir or 's3://' in args.output_dir:
     # set up s3 connection
@@ -84,6 +74,9 @@ if 's3://' in args.bids_dir or 's3://' in args.output_dir:
             output_dir_relative_path = ''
         elif output_dir_relative_path[0] == '/':
             output_dir_relative_path = output_dir_relative_path[1:]
+        if len(output_dir_relative_path) > 0 and not output_dir_relative_path[-1] == '/':
+            output_dir_relative_path = output_dir_relative_path+'/'
+
     else:
         output_dir_bucket_name = ''
 # only for a subset of subjects at participant level
@@ -92,6 +85,7 @@ if args.participant_label and args.analysis_level == "participant":
 # running group level for all subject
 elif args.analysis_level == "group":
     if bids_dir_bucket_name:
+        
         subjects_to_analyze = s3_get_bids_subjects(bucketName=bids_dir_bucket_name, 
                             prefix=bids_dir_relative_path,
                             access_key=args.s3_access_key, 
@@ -100,7 +94,7 @@ elif args.analysis_level == "group":
     else:
         subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
         subjects_to_analyze = [subject_dir for subject_dir in subject_dirs]
-    assert subjects_to_analyze, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the BIDS folder?'
+    assert len(subjects_to_analyze)>0, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the BIDS folder?'
     if output_dir_bucket_name:
         output_dir_subjects_to_analyze = s3_get_bids_subjects(bucketName=output_dir_bucket_name, 
                             prefix=output_dir_relative_path,
@@ -110,7 +104,7 @@ elif args.analysis_level == "group":
     else:
         output_dir_subject_dirs = glob(os.path.join(args.output_dir, "sub-*"))
         output_dir_subjects_to_analyze = [subject_dir for subject_dir in output_dir_subject_dirs]
-    assert output_dir_subjects_to_analyze, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the abcd-hcp-pipeline derivatives folder?'   
+    assert len(output_dir_subjects_to_analyze)>0, args.bids_dir + ' has no subject folders within it. Are you sure this the root to the abcd-hcp-pipeline derivatives folder?'   
 else:
     raise Exception("You must enter participant --participant_label or group in order to run.")
 
@@ -129,9 +123,10 @@ if bids_dir_bucket_name:
             secret_key=args.s3_secret_key, 
             host=args.s3_hostname,
             prefix=bids_dir_relative_path + 'sub-')
-else:
-    subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
+else: #TODO this currently relies on BIDSLayout, this will need to change
+    pass
     """
+    subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
     expected_tasks = []
     for t in layout.get_tasks():
         if len(layout.get_acquisitions(task=t)) > 0:
@@ -140,6 +135,7 @@ else:
         else:
             expected_tasks.append(t)
     """
+    
 print("Found the following fMRI tasks: ", expected_tasks)
 minimal_proc_expected_tasks = ['Minimal Preprocessing: ' + item for item in expected_tasks]
 dcan_bold_proc_expected_tasks = ['DCANBoldPreProc: ' + item for item in expected_tasks]
@@ -150,9 +146,10 @@ if len(sessions_to_analyze) > 0:
     columns.insert(0, "ses_id")
 columns.insert(0, "structural")
 columns.insert(0, "subj_id")
+columns.insert(0,'note')
 
-statuses = pd.DataFrame(columns=columns)
-
+session_statuses = pd.DataFrame(columns=columns)
+study_ses_count = 0
 for subject in subjects_to_analyze:
     if bids_dir_bucket_name: # if bids dir is a bucket pull sessions from that subject
         sessions_to_analyze = s3_get_bids_sessions(bucketName=bids_dir_bucket_name, 
@@ -165,6 +162,7 @@ for subject in subjects_to_analyze:
         
     if sessions_to_analyze:
         for session in sessions_to_analyze:
+            study_ses_count = study_ses_count + 1
             session_status = pd.DataFrame(columns=columns,index=range(1))
             session_status.loc[0].subj_id = subject.split('-')[1]
             session_status.loc[0].ses_id = session.split('-')[1]
@@ -174,42 +172,82 @@ for subject in subjects_to_analyze:
                     secret_key=args.s3_secret_key, 
                     host=args.s3_hostname,
                     prefix=bids_dir_relative_path + subject+ '/' +session)
-            else:   
-                bolds = layout.get(session=session.split('-')[1],subject=subject.split('-')[1],type='bold',extensions='.nii.gz',return_type='file')
+                struct = s3_get_bids_structs(access_key=args.s3_access_key,
+                    bucketName=bids_dir_bucket_name,
+                    secret_key=args.s3_secret_key, 
+                    host=args.s3_hostname,
+                    prefix=bids_dir_relative_path + subject+ '/' +session)
+            else:
+                pass
+                #bolds = layout.get(session=session.split('-')[1],subject=subject.split('-')[1],type='bold',extensions='.nii.gz',return_type='file')
             """
             minimal_preprocessed_bolds = []
             DCANBoldPreProc_bolds = []
             bids_bolds = []
             """
-            if not output_dir_bucket_name:
-                minimal_func_status = abcd_minimal_func_hcp_status_outputs(output_dir=args.output_dir+'/' +subject+ '/' +session)
-                """    
-                for bold in bolds:
-                    bids_bolds.append(bold)
-                  
-            
-                    bold_prefix = ''.join(os.path.basename(bold).split('.')[0].split('_run-')) # odd format here task-rest01 rather than task-rest_run-01 # TODO: as more use cases come up this may change
-                    minimal_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
-                        access_key=args.s3_access_key,
-                        secret_key=args.s3_secret_key,
-                        host=args.s3_hostname,
-                        prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/'+bold_prefix)
-                    dcan_bold_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
-                        access_key=args.s3_access_key,
-                        secret_key=args.s3_secret_key,
-                        host=args.s3_hostname,
-                        prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/DCANBOLDProc_v4.0.0/'+bold_prefix)
-                if minimal_func_key: 
-                    minimal_preprocessed_bolds.append(bold)
-                if dcan_bold_func_key:
-                    DCANBoldPreProc_bolds.append(bold)
-                """
+            if len(struct) > 0: # if structurals can be found continue, otherwise tag this as "No BIDS" 
+                if not output_dir_bucket_name:
+                    pass
+                else:
+                    # LOOK IN S3 FOR FINAL STRUCTURAL OUTPUT 
+                    struct_status = s3_abcd_hcp_struct_status(bucketName=output_dir_bucket_name,
+                            access_key=args.s3_access_key,
+                            secret_key=args.s3_secret_key,
+                            host=args.s3_hostname,
+                            prefix=output_dir_relative_path +subject+ '/' +session)
             else:
-                minimal_func_status = s3_abcd_minimal_func_hcp_status_outputs(bucketName=output_dir_bucket_name,
-                        access_key=args.s3_access_key,
-                        secret_key=args.s3_secret_key,
-                        host=args.s3_hostname,
-                        prefix=output_dir_relative_path + '/' +subject+ '/' +session)    
+                struct_status = "NO BIDS"
+            session_status.loc[0,'structural'] = struct_status
+            if len(bolds) > 0: # if bolds can be found continue, otherwise tag this as "No BIDS"
+                if not output_dir_bucket_name:
+                    pass
+                    """
+                    minimal_func_status = abcd_minimal_func_hcp_status_outputs(output_dir=args.output_dir+'/' +subject+ '/' +session)
+                        
+                    for bold in bolds:
+                        bids_bolds.append(bold)
+                    
+                
+                        bold_prefix = ''.join(os.path.basename(bold).split('.')[0].split('_run-')) # odd format here task-rest01 rather than task-rest_run-01 # TODO: as more use cases come up this may change
+                        minimal_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
+                            access_key=args.s3_access_key,
+                            secret_key=args.s3_secret_key,
+                            host=args.s3_hostname,
+                            prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/'+bold_prefix)
+                        dcan_bold_func_key = s3_abcd_hcp_minimal_func_outputs(bucketName=output_dir_bucket_name,
+                            access_key=args.s3_access_key,
+                            secret_key=args.s3_secret_key,
+                            host=args.s3_hostname,
+                            prefix=output_dir_relative_path + '/' +subject+ '/' +session + '/files/MNINonLinear/Results/DCANBOLDProc_v4.0.0/'+bold_prefix)
+                    if minimal_func_key: 
+                        minimal_preprocessed_bolds.append(bold)
+                    if dcan_bold_func_key:
+                        DCANBoldPreProc_bolds.append(bold)
+                    """
+                else:
+                    #  LOOK IN S3 FOR FINAL FUNTIONAL OUTPUTS
+                    minimal_func_status = s3_abcd_hcp_minimal_func_status(bucketName=output_dir_bucket_name,
+                            access_key=args.s3_access_key,
+                            secret_key=args.s3_secret_key,
+                            host=args.s3_hostname,
+                            prefix=output_dir_relative_path +subject+ '/' +session)
+                    DCANBoldPreProc_func_status = s3_abcd_hcp_DCANBoldPreProc_func_status(bucketName=output_dir_bucket_name,
+                            access_key=args.s3_access_key,
+                            secret_key=args.s3_secret_key,
+                            host=args.s3_hostname,
+                            prefix=output_dir_relative_path +subject+ '/' +session)
+            else:
+                minimal_func_status = "NO BIDS"
+                DCANBoldPreProc_func_status = "NO BIDS"
+            # Tag funcs with status
+            for task in minimal_proc_expected_tasks: 
+                session_status.loc[0,task] = minimal_func_status
+            for task in dcan_bold_proc_expected_tasks:
+                session_status.loc[0,task] = DCANBoldPreProc_func_status
+            
+            session_statuses = session_statuses.append(session_status,ignore_index=True)
+                
+            """
             unique_minimal_preprocessed_tasks = list(set(minimal_preprocessed_bolds))
             unique_DCANBoldPreProc_bolds = list(set(DCANBoldPreProc_bolds))
             unique_bids_tasks = list(set(bids_bolds))
@@ -220,21 +258,10 @@ for subject in subjects_to_analyze:
                     task_status="ok"
                 elif task not in bids_tasks:
                     task_status="NO_BIDS"
-                session_status.loc[0,task] = task_status
-            
-            # LOOK IN S3 FOR FINAL STRUCTURAL OUTPUT
-            session_status.loc[0,'structural'] = struc_status
-            session_statuses = session_statuses.append(session_status,ignore_index=True)
-
-            # save output to CSV
-            session_statuses = pd.merge(session_statuses,hopelessdf,how="left",on="ses_id")
-            session_statuses.columns = [col.replace('task-', '') for col in session_statuses.columns]
-            session_statuses = session_statuses.sort_values(by=['subj_id','ses_id'],ignore_index=True)
-            session_statuses = session_statuses.replace(np.nan, '', regex=True)
-            session_statuses.to_csv('s3_status_report.csv')
-
-        print('\n\n')
+            """    
     else:
+        pass
+        """
         if bids_dir_bucket_name:
             pass
         else:
@@ -244,4 +271,15 @@ for subject in subjects_to_analyze:
             columns.insert(0, "subj_id")
             session_statuses = pd.DataFrame(columns=columns)
             study_ses_count = len(layout.get_subjects())
+        """
+# save output to CSV
+session_statuses.columns = [col.replace('task-', '') for col in session_statuses.columns]
+session_statuses = session_statuses.sort_values(by=['subj_id','ses_id'],ignore_index=True)
+session_statuses = session_statuses.replace(np.nan, '', regex=True)
+session_statuses.to_csv(os.path.join(args.report_output_dir,'s3_status_report.csv'))
+
+# generate HTML reporte
+html_report_wf(session_statuses_df=session_statuses,report_output_dir=args.report_output_dir,base_dir=current_path)
+
+print('CSV and HTML status report files have been outputted to ' + args.report_output_dir)
         
