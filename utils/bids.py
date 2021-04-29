@@ -5,7 +5,8 @@ from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.handlers import disable_signing
 import pdb
-from bids import BIDSLayout
+import glob
+import os
 
 def s3_client(access_key,host,secret_key):
     session = boto3.session.Session()
@@ -67,6 +68,7 @@ def s3_get_bids_structs(access_key,bucketName,host,prefix,secret_key):
     except KeyError:
         return
 
+
 def s3_get_bids_funcs(access_key,bucketName,host,prefix,secret_key):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='_bold.nii.gz' # looking for functional nifti files
@@ -114,6 +116,49 @@ def s3_get_bids_funcs(access_key,bucketName,host,prefix,secret_key):
         return funcs
     except KeyError:
         return
+
+def get_bids_structs(bids_dir):
+    suffix='_T1w.nii.gz' # looking for at least a T1w file
+    get_data = glob.glob(bids_dir+"/**/*"+suffix,recursive=True)
+    anats = []
+    for anat in get_data:
+        if 'anat' in anat:
+            anats.append(anat)
+    return anats
+
+def get_bids_funcs(bids_dir):
+    suffix='_bold.nii.gz' # looking for functional nifti files
+    get_data = glob.glob(bids_dir+"/**/*"+suffix,recursive=True)
+    funcs = []
+    for bold in get_data:
+        if 'func' in bold: 
+
+            # figure out functional basename
+            try:
+                task = bold.split('task-')[1].split('_')[0]
+            except:
+                raise Exception('this is not a BIDS folder. Exiting.')
+            try:
+                run = bold.split('run-')[1].split('_')[0]
+            except:
+                run=''
+            try:
+                acq = bold.split('acq-')[1].split('_')[0]
+            except:
+                acq=''
+            if not run:
+                if not acq:
+                    funcs.append('task-'+task)
+                else:
+                    funcs.append('task-'+task+'_acq-'+acq)
+            else:
+                if not acq:
+                    funcs.append('task-'+task+'_run-'+run)
+                else:
+                    funcs.append('task-'+task+'_acq-'+acq+'_run-'+run)
+                
+        funcs = list(set(funcs))
+        return funcs
 
 
         

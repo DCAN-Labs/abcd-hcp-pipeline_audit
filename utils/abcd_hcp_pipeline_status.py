@@ -2,11 +2,13 @@ import os
 import json
 import boto3
 import botocore
+import glob
 # For anonymous access to the bucket.
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.handlers import disable_signing
 from .bids import s3_client
+import pdb
 
 def parse_s3_status_json(access_key,host,secret_key,bucketName,key):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
@@ -17,65 +19,37 @@ def parse_s3_status_json(access_key,host,secret_key,bucketName,key):
     if node_status == 1:
         status='ok'
     elif node_status == 2:
-        pass
+        status='incomplete'
     elif node_status == 3:
         status='failed'
     elif node_status == 4:
         status = 'NO_ABCD-HCP'
     elif node_status == 999:
-        staus = 'not sure'
+        status = 'not sure'
+    else:
+        status = 'not sure'
     return status
 
+def parse_status_json(json_file):
+    with open(json_file,'r') as f:
+        json_data = json.load(f)
+    node_status = json_data['node_status']
+    if node_status == 1:
+        status='ok'
+    elif node_status == 2:
+        status='incomplete'
+    elif node_status == 3:
+        status='failed'
+    elif node_status == 4:
+        status = 'NO_ABCD-HCP'
+    elif node_status == 999:
+        status = 'not sure'
+    else:
+        status = 'not sure'
+    return status
 
-def s3_abcd_hcp_struct_outputs(bids_prefix,bucketName,access_key,derivatives_prefix,secret_key,host,subject,scanning_session,client):
-    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
-
-    try:
-        t1_suffix='T1w.nii.gz'
-        bidst1 = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
-                                            MaxKeys=1000,
-                                            Prefix=bids_prefix,
-                                            ContinuationToken='',
-                                            FetchOwner=False,
-                                            StartAfter='')
-    except:
-        bidst1=[]
-        pass
-    try:
-        t2_suffix='T2w.nii.gz'
-        bidst2 = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
-                                            MaxKeys=1000,
-                                            Prefix=bids_prefix,
-                                            ContinuationToken='',
-                                            FetchOwner=False,
-                                            StartAfter='') 
-    except: 
-        try:
-            t2_suffix='FLAIR.nii.gz'
-            bidst2 = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
-                                            MaxKeys=1000,
-                                            Prefix=bids_prefix,
-                                            ContinuationToken='',
-                                            FetchOwner=False,
-                                            StartAfter='')
-        except:
-            bidst2=[]
-            pass
-
-    try:
-        client.head_object(Bucket=bucketName, Key=struct_output_suffix)
-        abcd_hcp_t1 = True
-    except:
-        abcd_hcp_t1 = False
-        pass
-    if not bidst1 or not bidst2:
-        struc_status="NO_BIDS"
-    elif bidst1 and bidst2 and not abcd_hcp_t1:
-        struc_status="NO_HCP"
-    elif bidst1 and bidst2 and abcd_hcp_t1:
-        struc_status="ok"
-    
-def s3_abcd_hcp_struct_status(bucketName,access_key,secret_key,host,prefix):
+   
+def s3_abcd_hcp_struct_status(output_dir):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='status.json'
     try:
@@ -100,10 +74,6 @@ def s3_abcd_hcp_struct_status(bucketName,access_key,secret_key,host,prefix):
     except KeyError:
         stage_status = 'NO_ABCD-HCP'
         return stage_status
-
-def abcd_minimal_func_hcp_status_outputs(output_dir):
-    pass
-
 
 def s3_abcd_hcp_minimal_func_status(bucketName,access_key,secret_key,host,prefix):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
@@ -130,51 +100,6 @@ def s3_abcd_hcp_minimal_func_status(bucketName,access_key,secret_key,host,prefix
     except KeyError:
         stage_status = 'NO_ABCD-HCP'
         return stage_status
-    
-def s3_abcd_hcp_minimal_func_outputs(bucketName,access_key,secret_key,host,prefix):
-    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
-    suffix='_Atlas.dtseries.nii'
-    try:
-        list_objects = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
-                                          MaxKeys=1000,
-                                          Prefix=prefix,
-                                          ContinuationToken='',
-                                          FetchOwner=False,
-                                          StartAfter='')
-            
-    except KeyError:
-        return
-    try:
-        for obj in list_objects['Contents']:
-            key = obj['Key']
-            if key.endswith(suffix):
-                return key
-        return
-    except KeyError:
-        return
-
-def s3_abcd_hcp_DCANBoldPreProc_func_outputs(bucketName,access_key,secret_key,host,prefix):
-    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
-    suffix='_DCANBOLDProc_v4.0.0_Atlas.dtseries.nii'
-    try:
-        list_objects = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
-                                          MaxKeys=1000,
-                                          Prefix=prefix,
-                                          ContinuationToken='',
-                                          FetchOwner=False,
-                                          StartAfter='')
-        
-        
-    except KeyError:
-        return
-    try:
-        for obj in list_objects['Contents']:
-            key = obj['Key']
-            if key.endswith(suffix):
-                return key
-        return
-    except KeyError:
-        return
 
 def s3_abcd_hcp_DCANBoldPreProc_func_status(bucketName,access_key,secret_key,host,prefix):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
@@ -201,3 +126,42 @@ def s3_abcd_hcp_DCANBoldPreProc_func_status(bucketName,access_key,secret_key,hos
     except KeyError:
         stage_status = 'NO_ABCD-HCP'
         return stage_status
+
+def abcd_hcp_struct_status(output_dir):
+    suffix='status.json'
+    get_status_json = glob.glob(output_dir+"/**/logs/PostFreeSurfer/"+suffix,recursive=True)
+    if get_status_json:
+        stage_status = parse_status_json(get_status_json[0]) # assuming that we only find one status.json
+    else:
+        stage_status = 'NO_ABCD-HCP'
+    return stage_status
+
+def abcd_minimal_func_hcp_status_outputs(output_dir):
+    suffix='status.json'
+    get_status_json = glob.glob(output_dir+"/**/logs/FMRISurface/"+suffix,recursive=True)
+    if get_status_json:
+        stage_status = parse_status_json(get_status_json[0]) # assuming that we only find one status.json
+    else:
+        stage_status = 'NO_ABCD-HCP'
+    return stage_status
+
+def abcd_hcp_DCANBoldPreProc_func_status(output_dir):
+    suffix='status.json'
+    get_status_json = glob.glob(output_dir+"/**/logs/DCANBOLDProcessing/"+suffix,recursive=True)
+    if get_status_json:
+        stage_status = parse_status_json(get_status_json[0]) # assuming that we only find one status.json
+    else:
+        stage_status = 'NO_ABCD-HCP'
+    return stage_status
+
+def s3_abcd_hcp_struct_outputs(bids_prefix,bucketName,access_key,derivatives_prefix,secret_key,host,subject,scanning_session,client):
+    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
+
+def s3_abcd_hcp_minimal_func_outputs(bucketName,access_key,secret_key,host,prefix):
+    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
+    suffix='_Atlas.dtseries.nii'
+
+def s3_abcd_hcp_DCANBoldPreProc_func_outputs(bucketName,access_key,secret_key,host,prefix):
+    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
+    suffix='_DCANBOLDProc_v4.0.0_Atlas.dtseries.nii'
+    
