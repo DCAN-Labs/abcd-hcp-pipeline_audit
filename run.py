@@ -139,11 +139,11 @@ dcan_bold_proc_expected_tasks = ['DCANBoldPreProc: ' + item for item in expected
 text_expected_tasks = minimal_proc_expected_tasks + dcan_bold_proc_expected_tasks
 columns = text_expected_tasks.copy()
 
+
+columns.insert(0, "structural")
 if len(sessions_to_analyze) > 0:
     columns.insert(0, "ses_id")
-columns.insert(0, "structural")
 columns.insert(0, "subj_id")
-columns.insert(0,'note')
 
 session_statuses = pd.DataFrame(columns=columns)
 study_ses_count = 0

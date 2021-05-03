@@ -17,12 +17,27 @@ def run(command, env={}):
     if process.returncode != 0:
         raise Exception("Non zero return code: %d"%process.returncode)
 
+    if node_status == 1:
+        status='ok'
+    elif node_status == 2:
+        status='in process'
+    elif node_status == 3:
+        status='failed'
+    elif node_status == 4:
+        status = 'NO_ABCD-HCP'
+    elif node_status == 999:
+        status = 'not sure'
+    else:
+        status = 'pending'
+
 def colormap(val):
     if type(val) == int:
         color='white'
-    elif val == "NO BIDS" or val == "failed": 
+    elif val == "NO_ABCD-HCP" or val == "failed": 
         color='tomato'
-    elif val == "NO_ABCD-HCP": 
+    elif val == "NO BIDS":
+        color = "darkorange"
+    elif val == "pending" or val == "in process" or val == "not sure":
         color='gold'
     elif val == "ok": 
         color='palegreen'
