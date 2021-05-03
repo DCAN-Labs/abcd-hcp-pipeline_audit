@@ -19,7 +19,7 @@ def parse_s3_status_json(access_key,host,secret_key,bucketName,key):
     if node_status == 1:
         status='ok'
     elif node_status == 2:
-        status='incomplete'
+        status='in process'
     elif node_status == 3:
         status='failed'
     elif node_status == 4:
@@ -27,7 +27,7 @@ def parse_s3_status_json(access_key,host,secret_key,bucketName,key):
     elif node_status == 999:
         status = 'not sure'
     else:
-        status = 'not sure'
+        status = 'pending'
     return status
 
 def parse_status_json(json_file):
@@ -37,7 +37,7 @@ def parse_status_json(json_file):
     if node_status == 1:
         status='ok'
     elif node_status == 2:
-        status='incomplete'
+        status='in process'
     elif node_status == 3:
         status='failed'
     elif node_status == 4:
@@ -45,7 +45,7 @@ def parse_status_json(json_file):
     elif node_status == 999:
         status = 'not sure'
     else:
-        status = 'not sure'
+        status = 'pending'
     return status
 
    
