@@ -60,6 +60,6 @@ def html_report_wf(session_statuses_df,report_output_dir,base_dir):
                 set_table_attributes('class="sortable"').\
                 render()
     # Added string to the end of htmlstyled calling the JavaScript
-    htmlstyled += '\n' + "<script src='scripts/sorttable.min.js'></script>"
+    htmlstyled += '\n' + f"<script src='{os.path.abspath(os.path.join(base_dir, 'scripts','sorttable.min.js'))}'></script>"
     with open(os.path.join(report_output_dir,"s3_status_report.html"),"w") as fp:
         fp.write(htmlstyled)
