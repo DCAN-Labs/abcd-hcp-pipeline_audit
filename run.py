@@ -56,7 +56,7 @@ parser.add_argument('-v', '--version', action='version',
 # Parse and gather arguments
 args = parser.parse_args()
 
-current_path=os.path.realpath(__file__)
+current_path=os.path.dirname(__file__)
 # determine if bids_dir or output_dir are S3 buckets, and their respective names if so.
 if 's3://' in args.bids_dir or 's3://' in args.output_dir:
     # set up s3 connection
@@ -238,7 +238,7 @@ session_statuses = session_statuses.sort_values(by=['subj_id','ses_id'],ignore_i
 session_statuses = session_statuses.replace(np.nan, '', regex=True)
 session_statuses.to_csv(os.path.join(args.report_output_dir,'s3_status_report.csv'))
 
-# generate HTML reporte
+# generate HTML reporter
 html_report_wf(session_statuses_df=session_statuses,report_output_dir=args.report_output_dir,base_dir=current_path)
 
 print('CSV and HTML status report files have been outputted to ' + args.report_output_dir)
