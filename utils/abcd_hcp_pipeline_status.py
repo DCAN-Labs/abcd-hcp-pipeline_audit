@@ -49,7 +49,7 @@ def parse_status_json(json_file):
     return status
 
    
-def s3_abcd_hcp_struct_status(output_dir):
+def s3_abcd_hcp_struct_status(bucketName,access_key,secret_key,host,prefix):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='status.json'
     try:
