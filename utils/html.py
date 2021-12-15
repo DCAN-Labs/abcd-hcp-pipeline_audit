@@ -55,7 +55,6 @@ def html_report_wf(session_statuses_df,report_output_dir,base_dir):
     htmlstyled = html.style.\
                 applymap(colormap).\
                 set_properties(**{'font-family':'Helvetica','font-size':'8pt','text-align':'center'}).\
-                set_properties(subset=['note'], **{'text-align': 'left'}).\
                 set_table_styles([{'selector': ' ', 'props': [('font-family', 'Helvetica')]}]).\
                 set_table_attributes('class="sortable"').\
                 render()
