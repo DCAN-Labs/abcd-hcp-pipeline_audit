@@ -212,7 +212,7 @@ for subject in subjects_to_analyze:
                 minimal_func_status = "NO BIDS"
                 DCANBoldPreProc_func_status = "NO BIDS"
             # Tag funcs with status
-            
+            print('subject:{}, session:{}'.format(subject,session))
             for task in expected_tasks:
                 minimal_proc_task = 'Minimal Preprocessing: ' + task
                 dcan_proc_task = 'DCANBoldPreProc: ' + task
@@ -239,7 +239,7 @@ session_statuses = session_statuses.replace(np.nan, '', regex=True)
 session_statuses.to_csv(os.path.join(args.report_output_dir,'s3_status_report.csv'))
 
 # generate HTML reporter
-html_report_wf(session_statuses_df=session_statuses,report_output_dir=args.report_output_dir,base_dir=current_path)
+html_report_wf(session_statuses_df=session_statuses,report_output_dir=args.report_output_dir)
 
 print('CSV and HTML status report files have been outputted to ' + args.report_output_dir)
         

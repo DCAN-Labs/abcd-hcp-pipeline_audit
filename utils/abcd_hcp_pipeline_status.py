@@ -15,38 +15,47 @@ def parse_s3_status_json(access_key,host,secret_key,bucketName,key):
     posix_key = key.replace('%2F','/')
     s3_object = client.get_object(Bucket=bucketName,Key=posix_key)
     s3_object_body = s3_object['Body']
-    node_status = json.loads(s3_object_body.read())['node_status']
-    if node_status == 1:
-        status='ok'
-    elif node_status == 2:
-        status='in process'
-    elif node_status == 3:
-        status='failed'
-    elif node_status == 4:
-        status = 'NO_ABCD-HCP'
-    elif node_status == 999:
+    try: # if status.json does not look like a json file, mark the status as "not sure"
+        node_status = json.loads(s3_object_body.read())['node_status']
+        if node_status == 1:
+            status='ok'
+        elif node_status == 2:
+            status='in process'
+        elif node_status == 3:
+            status='failed'
+        elif node_status == 4:
+            status = 'NO_ABCD-HCP'
+        elif node_status == 999:
+            status = 'not sure'
+        else:
+            status = 'pending'
+    except:
         status = 'not sure'
-    else:
-        status = 'pending'
+        
     return status
 
 def parse_status_json(json_file):
-    with open(json_file,'r') as f:
-        json_data = json.load(f)
-    node_status = json_data['node_status']
-    if node_status == 1:
-        status='ok'
-    elif node_status == 2:
-        status='in process'
-    elif node_status == 3:
-        status='failed'
-    elif node_status == 4:
-        status = 'NO_ABCD-HCP'
-    elif node_status == 999:
+    try: # if status.json does not look like a json file, mark the status as "not sure"
+        with open(json_file,'r') as f:
+            json_data = json.load(f)
+        node_status = json_data['node_status']
+        if node_status == 1:
+            status='ok'
+        elif node_status == 2:
+            status='in process'
+        elif node_status == 3:
+            status='failed'
+        elif node_status == 4:
+            status = 'NO_ABCD-HCP'
+        elif node_status == 999:
+            status = 'not sure'
+        else:
+            status = 'pending'
+    except:
         status = 'not sure'
-    else:
-        status = 'pending'
+    
     return status
+        
 
    
 def s3_abcd_hcp_struct_status(bucketName,access_key,secret_key,host,prefix):
