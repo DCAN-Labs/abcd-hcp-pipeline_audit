@@ -231,7 +231,8 @@ for subject in subjects_to_analyze:
             session_statuses = session_statuses.append(session_status,ignore_index=True)
                 
     else:
-        raise NotImplementedError("BIDS folders without session folders has not be implemented")
+        print("BIDS folders without session folders has not be implemented for subject", subject)
+        continue
 # save output to CSV
 session_statuses.columns = [col.replace('task-', '') for col in session_statuses.columns]
 session_statuses = session_statuses.sort_values(by=['subj_id','ses_id'],ignore_index=True)
