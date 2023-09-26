@@ -72,7 +72,7 @@ optional arguments:
 If you need to run the audit on more than one output bucket, therefore creating multiple status.csv files, you can use the `concat_s3_status.py` script to merge them together. This script will merge the multiple csvs into one output csv without any duplicates (unless the `--keep-duplicate-ids` flag is specified). If you want to keep track of where each subject originated from, you can specify the `src_csv` flag which will add a column that contains the path to which input csv that row came from. You can specify the `last-ok-col` flag to add a column that contains the last column in a row that has "ok" as the value. 
 
 ## Usage
-
+```
 usage: merge_s3.py [-h] -i INPUT [INPUT ...] -o OUTPUT [--last-ok-col]
                    [--src-csv] [--keep-duplicate-ids]
 
@@ -89,3 +89,4 @@ optional arguments:
   --last-ok-col         Include 'last_ok_col' column in the output
   --src-csv             Include 'src_csv' column in the output
   --keep-duplicate-ids  Keep duplicate rows based on 'subj_id'
+```
