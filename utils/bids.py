@@ -17,24 +17,32 @@ def s3_client(access_key,host,secret_key):
 
     
 def s3_get_bids_subjects(access_key,bucketName,host,prefix,secret_key):
-    client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
-    paginator = client.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=bucketName,Delimiter='/',Prefix=prefix,EncodingType='url',ContinuationToken='',
+	if len(prefix) > 0:
+		if prefix[0] == '/':
+			prefix = prefix[1:]
+	prefix += 'sub-'
+	client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
+	paginator = client.get_paginator('list_objects_v2')
+	page_iterator = paginator.paginate(Bucket=bucketName,Delimiter='/',Prefix=prefix,EncodingType='url',ContinuationToken='',
                                              FetchOwner=False,
                                              StartAfter='')
-    get_data = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
+	get_data = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
                                             Prefix=prefix,
                                              MaxKeys=1000,
                                              ContinuationToken='',
                                              FetchOwner=False,
                                              StartAfter='')
-    bids_subjects = []
-    for page in page_iterator:
-        page_bids_subjects = ['sub-'+item['Prefix'].split('sub-')[1].strip('/') for item in page['CommonPrefixes'] if 'sub' in item['Prefix']]
-        bids_subjects.extend(page_bids_subjects)
-    return bids_subjects
+	bids_subjects = []
+	for page in page_iterator:
+		page_bids_subjects = ['sub-'+item['Prefix'].split('sub-')[1].strip('/') for item in page['CommonPrefixes'] if 'sub' in item['Prefix']]
+		bids_subjects.extend(page_bids_subjects)
+	return bids_subjects
 
 def s3_get_bids_sessions(access_key,bucketName,host,prefix,secret_key):
+    if len(prefix) > 0:
+        if prefix[0] == '/':
+            prefix = prefix[1:]
+    prefix += 'ses-'
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     get_data = client.list_objects_v2(Bucket=bucketName,Delimiter='/',EncodingType='url',
                                           MaxKeys=1000,
@@ -42,12 +50,14 @@ def s3_get_bids_sessions(access_key,bucketName,host,prefix,secret_key):
                                           ContinuationToken='',
                                           FetchOwner=False,
                                           StartAfter='')
-    bids_sessions = [item['Prefix'].split('/')[1] for item in get_data['CommonPrefixes'] if 'ses' in item['Prefix'].split('/')[1]]
+    bids_sessions = [item['Prefix'].split('/')[2] for item in get_data['CommonPrefixes'] if 'ses' in item['Prefix'].split('/')[2]]
     return bids_sessions
 
 def s3_get_bids_structs(access_key,bucketName,host,prefix,secret_key):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='_T1w.nii.gz' # looking for at least a T1w file
+    if prefix[0] == '/':
+        prefix = prefix[1:]
     try:
         get_data = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
                                           Prefix=prefix,
@@ -72,13 +82,15 @@ def s3_get_bids_structs(access_key,bucketName,host,prefix,secret_key):
 def s3_get_bids_funcs(access_key,bucketName,host,prefix,secret_key):
     client = s3_client(access_key=access_key,host=host,secret_key=secret_key)
     suffix='_bold.nii.gz' # looking for functional nifti files
+    if prefix[0] == '/':
+        prefix = prefix[1:]
     try:
         get_data = client.list_objects_v2(Bucket=bucketName,EncodingType='url',
                                           Prefix=prefix,
                                           ContinuationToken='',
                                           FetchOwner=False,
                                           StartAfter='')
-        
+        #print(get_data['Contents'])    
     except KeyError:
         return
     try:
