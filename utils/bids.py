@@ -169,8 +169,8 @@ def get_bids_funcs(bids_dir):
                 else:
                     funcs.append('task-'+task+'_acq-'+acq+'_run-'+run)
                 
-        funcs = list(set(funcs))
-        return funcs
+    funcs = list(set(funcs))
+    return funcs
 
 
         
