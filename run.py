@@ -60,27 +60,27 @@ current_path=os.path.dirname(__file__)
 # determine if bids_dir or output_dir are S3 buckets, and their respective names if so.
 if 's3://' in args.bids_dir or 's3://' in args.output_dir:
     # set up s3 connection
-    assert args.s3_access_key, print(args.bids_dir + ' or ' +  args.output_dir + ' are S3 buckets but you did not input a S3 access key following argument "--s3_access_key". If using MSI, this can be found at: https://www.msi.umn.edu/content/s3-credentials.')
-    assert args.s3_secret_key, print(args.bids_dir + ' or ' +  args.output_dir + ' are S3 buckets but you did not input a S3 secret key following argument "--s3_secret_key". If using MSI, this can be found at: https://www.msi.umn.edu/content/s3-credentials.')
-    if 's3://' in args.bids_dir:
-        bids_dir_bucket_name = args.bids_dir.split('s3://')[1].split('/')[0]
-        bids_dir_relative_path = args.bids_dir.split('s3://'+bids_dir_bucket_name)[1]
-        if bids_dir_relative_path == '/': 
-            bids_dir_relative_path = ''
-    else:
-        bids_dir_bucket_name = ''
-    if 's3://' in args.output_dir:
-        output_dir_bucket_name = args.output_dir.split('s3://')[1].split('/')[0]
-        output_dir_relative_path = args.output_dir.split('s3://'+output_dir_bucket_name)[1]
-        if output_dir_relative_path == '/':
-            output_dir_relative_path = ''
-        elif output_dir_relative_path[0] == '/':
-            output_dir_relative_path = output_dir_relative_path[1:]
-        if len(output_dir_relative_path) > 0 and not output_dir_relative_path[-1] == '/':
-            output_dir_relative_path = output_dir_relative_path+'/'
+	assert args.s3_access_key, print(args.bids_dir + ' or ' +  args.output_dir + ' are S3 buckets but you did not input a S3 access key following argument "--s3_access_key". If using MSI, this can be found at: https://www.msi.umn.edu/content/s3-credentials.')
+	assert args.s3_secret_key, print(args.bids_dir + ' or ' +  args.output_dir + ' are S3 buckets but you did not input a S3 secret key following argument "--s3_secret_key". If using MSI, this can be found at: https://www.msi.umn.edu/content/s3-credentials.')
+	if 's3://' in args.bids_dir:
+		bids_dir_bucket_name = args.bids_dir.split('s3://')[1].split('/')[0]
+		bids_dir_relative_path = args.bids_dir.split('s3://'+bids_dir_bucket_name)[1]
+		if bids_dir_relative_path == '/': 
+			bids_dir_relative_path = ''
+	else:
+		bids_dir_bucket_name = ''
+	if 's3://' in args.output_dir:
+		output_dir_bucket_name = args.output_dir.split('s3://')[1].split('/')[0]
+		output_dir_relative_path = args.output_dir.split('s3://'+output_dir_bucket_name)[1]
+		if output_dir_relative_path == '/':
+			output_dir_relative_path = ''
+		elif output_dir_relative_path[0] == '/':
+			output_dir_relative_path = output_dir_relative_path[1:]
+		if len(output_dir_relative_path) > 0 and not output_dir_relative_path[-1] == '/':
+			output_dir_relative_path = output_dir_relative_path+'/'
 
-    else:
-        output_dir_bucket_name = ''
+	else:
+		output_dir_bucket_name = ''
 else:
     bids_dir_bucket_name = ''
     output_dir_bucket_name = ''
@@ -90,12 +90,12 @@ if args.participant_label and args.analysis_level == "participant":
 # running group level for all subject
 elif args.analysis_level == "group":
     if bids_dir_bucket_name:
-        
         subjects_to_analyze = s3_get_bids_subjects(bucketName=bids_dir_bucket_name, 
                             prefix=bids_dir_relative_path,
                             access_key=args.s3_access_key, 
                             secret_key=args.s3_secret_key, 
                             host=args.s3_hostname)
+
     else:
         subject_dirs = glob(os.path.join(args.bids_dir, "sub-*"))
         subjects_to_analyze = [os.path.basename(subject_dir) for subject_dir in subject_dirs]
@@ -123,6 +123,7 @@ if bids_dir_bucket_name:
                         access_key=args.s3_access_key, 
                         secret_key=args.s3_secret_key, 
                         host=args.s3_hostname) # checking if sessions exist
+    print("FOUND SESSIONS",sessions_to_analyze)                    
     expected_tasks = s3_get_bids_funcs(access_key=args.s3_access_key,
             bucketName=bids_dir_bucket_name,
             secret_key=args.s3_secret_key, 
