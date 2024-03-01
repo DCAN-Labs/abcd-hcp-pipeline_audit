@@ -67,6 +67,10 @@ if 's3://' in args.bids_dir or 's3://' in args.output_dir:
 		bids_dir_relative_path = args.bids_dir.split('s3://'+bids_dir_bucket_name)[1]
 		if bids_dir_relative_path == '/': 
 			bids_dir_relative_path = ''
+		elif bids_dir_relative_path[0] == '/':
+			bids_dir_relative_path = bids_dir_relative_path[1:]
+		if len(bids_dir_relative_path) > 0 and not bids_dir_relative_path[-1] == '/':
+			bids_dir_relative_path = bids_dir_relative_path+'/'
 	else:
 		bids_dir_bucket_name = ''
 	if 's3://' in args.output_dir:
